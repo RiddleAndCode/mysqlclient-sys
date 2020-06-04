@@ -1,7 +1,7 @@
-#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
 
-#[cfg(not(windows))]
-include!("bindings_macos.rs");
+pub type my_bool = bool;
 
-#[cfg(windows)]
-include!("bindings_windows.rs");
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
