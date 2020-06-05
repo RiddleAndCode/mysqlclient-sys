@@ -4,27 +4,27 @@ extern crate pkg_config;
 extern crate vcpkg;
 
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
-    let (_, include_path) = link_libs();
-    build_bindings(include_path);
+    let (_, include_paths) = link_libs();
+    build_bindings(include_paths);
 }
 
-fn build_bindings(include_path: impl AsRef<Path>) {
-    let bindings = bindgen::Builder::default()
-        .header(
-            include_path
-                .as_ref()
-                .join("mysql.h")
-                .as_os_str()
-                .to_string_lossy(),
-        )
+fn build_bindings(include_paths: Vec<String>) {
+    let mut builder = bindgen::Builder::default()
+        .header("wrapper.h")
         .default_enum_style(bindgen::EnumVariation::Rust {
             non_exhaustive: false,
         })
-        .default_alias_style(bindgen::AliasVariation::TypeAlias)
+        .default_alias_style(bindgen::AliasVariation::TypeAlias);
+
+    for path in include_paths {
+        builder = builder.clang_arg(&format!("-I{}", path));
+    }
+
+    let bindings = builder
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
@@ -35,26 +35,26 @@ fn build_bindings(include_path: impl AsRef<Path>) {
         .expect("Couldn't write bindings!");
 }
 
-fn link_libs() -> (String, String) {
-    let (libs_path, include_path, needs_link) =
+fn link_libs() -> (Vec<String>, Vec<String>) {
+    let (link_paths, include_paths, needs_link) =
     // try environment variables
-    if let (Ok(libs_path), Ok(include_path)) = (
+    if let (Ok(link_paths), Ok(include_paths)) = (
         env::var("MYSQLCLIENT_LIB_DIR"),
         env::var("MYSQLCLIENT_INCLUDE_DIR"),
     ) {
-        (libs_path, include_path, true)
+        (vec![link_paths], vec![include_paths], true)
     // try pkg-config
-    } else if let Some((libs_path, include_path)) = try_pkg_config() {
-        (libs_path, include_path, false)
+    } else if let Ok((link_paths, include_paths)) = try_pkg_config() {
+        (link_paths, include_paths, false)
     // try vcpkg
-    } else if let Some((libs_path, include_path)) = try_vcpkg() {
-        (libs_path, include_path, false)
+    } else if let Ok((link_paths, include_paths)) = try_vcpkg() {
+        (link_paths, include_paths, false)
     // try mysql_config
-    } else if let (Some(libs_path), Some(include_path)) = (
+    } else if let (Some(link_paths), Some(include_paths)) = (
         mysql_config_variable("pkglibdir"),
         mysql_config_variable("pkgincludedir"),
     ) {
-        (libs_path, include_path, true)
+        (vec![link_paths], vec![include_paths], true)
     } else {
         panic!("Could not find `mysqlclient` lib. \
                 Either `pgk-config`, `vcpkg` or `mysql_config` needs to be installed \
@@ -62,7 +62,9 @@ fn link_libs() -> (String, String) {
     };
 
     if needs_link {
-        println!("cargo:rustc-link-search=native={}", libs_path);
+        for path in link_paths.iter() {
+            println!("cargo:rustc-link-search=native={}", path);
+        }
         if cfg!(all(windows, target_env = "gnu")) {
             println!("cargo:rustc-link-lib=dylib=mysql");
         } else if cfg!(all(windows, target_env = "msvc")) {
@@ -72,7 +74,7 @@ fn link_libs() -> (String, String) {
         }
     }
 
-    (libs_path, include_path)
+    (link_paths, include_paths)
 }
 
 fn mysql_config_variable(var_name: &str) -> Option<String> {
@@ -86,40 +88,25 @@ fn mysql_config_variable(var_name: &str) -> Option<String> {
         .next()
 }
 
-fn extract_paths(
-    link_paths: Vec<PathBuf>,
-    include_paths: Vec<PathBuf>,
-) -> Option<(String, String)> {
-    eprintln!("{:?} {:?}", link_paths, include_paths);
-    link_paths
-        .get(0)
-        .and_then(|link_path| {
-            include_paths
-                .get(0)
-                .and_then(|include_path| Some((link_path, include_path)))
-        })
-        .map(|(link_path, include_path)| {
-            (
-                link_path.as_os_str().to_string_lossy().to_string(),
-                include_path.as_os_str().to_string_lossy().to_string(),
-            )
-        })
+fn path_strs(paths: Vec<PathBuf>) -> Vec<String> {
+    paths
+        .iter()
+        .map(|path| path.as_os_str().to_string_lossy().to_string())
+        .collect()
 }
 
-fn try_pkg_config() -> Option<(String, String)> {
+fn try_pkg_config() -> Result<(Vec<String>, Vec<String>), pkg_config::Error> {
     pkg_config::probe_library("mysqlclient")
-        .ok()
-        .and_then(|lib| extract_paths(lib.link_paths, lib.include_paths))
+        .map(|lib| (path_strs(lib.link_paths), path_strs(lib.include_paths)))
 }
 
 #[cfg(target_env = "msvc")]
-fn try_vcpkg() -> Option<(String, String)> {
+fn try_vcpkg() -> Result<(Vec<String>, Vec<String>), vcpkg::Error> {
     vcpkg::find_package("libmysql")
-        .ok()
-        .and_then(|lib| extract_paths(lib.link_paths, lib.include_paths))
+        .map(|lib| (path_strs(lib.link_paths), path_strs(lib.include_paths)))
 }
 
 #[cfg(not(target_env = "msvc"))]
-fn try_vcpkg() -> Option<(String, String)> {
-    None
+fn try_vcpkg() -> Result<(Vec<String>, Vec<String>), ()> {
+    Err(())
 }
