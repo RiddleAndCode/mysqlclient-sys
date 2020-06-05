@@ -1,0 +1,12 @@
+[package]
+name = "mysqlclient-sys"
+version = "0.3.0"
+authors = ["Sean Griffin <sean@seantheprogrammer.com>"]
+description = "Auto-generated rust bindings for libmysqlclient"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sgrif/mysqlclient-sys"
+edition = "2018"
+
+[dependencies]
+mysqlclient-macros = { path = "../mysqlclient-macros" }
+mysqlclient-bindings = { path = "../mysqlclient-bindings" }

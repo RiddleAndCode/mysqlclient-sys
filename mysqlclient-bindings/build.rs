@@ -13,6 +13,8 @@ fn main() {
 }
 
 fn build_bindings(include_paths: Vec<String>) {
+    println!("cargo:rerun-if-changed=wrapper.h");
+
     let mut builder = bindgen::Builder::default()
         .header("wrapper.h")
         .default_enum_style(bindgen::EnumVariation::Rust {

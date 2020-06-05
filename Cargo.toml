@@ -1,16 +1,7 @@
-[package]
-name = "mysqlclient-sys"
-version = "0.3.0"
-authors = ["Sean Griffin <sean@seantheprogrammer.com>"]
-description = "Auto-generated rust bindings for libmysqlclient"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/sgrif/mysqlclient-sys"
-build = "build.rs"
-links = "mysqlclient"
+[workspace]
 
-[build-dependencies]
-pkg-config = "0.3.9"
-bindgen = "0.54.0"
-
-[target.'cfg(target_env = "msvc")'.build-dependencies]
-vcpkg = "0.2.4"
+members = [
+    "mysqlclient-bindings",
+    "mysqlclient-macros",
+    "mysqlclient-sys",
+]
