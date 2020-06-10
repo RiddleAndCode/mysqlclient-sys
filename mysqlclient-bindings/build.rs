@@ -17,6 +17,7 @@ fn build_bindings(include_paths: Vec<String>) {
 
     let mut builder = bindgen::Builder::default()
         .header("wrapper.h")
+        .blacklist_type("my_bool")
         .default_enum_style(bindgen::EnumVariation::Rust {
             non_exhaustive: false,
         })

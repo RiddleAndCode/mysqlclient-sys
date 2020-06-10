@@ -2,6 +2,6 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-pub type my_bool = bool;
-
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
+pub type my_bool = bool;
