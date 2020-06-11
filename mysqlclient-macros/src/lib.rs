@@ -3,6 +3,12 @@ extern crate proc_macro;
 use proc_macro::{TokenStream, TokenTree};
 use semver::VersionReq;
 
+#[allow(dead_code)]
+enum Vendor {
+    MySQL,
+    MariaDB,
+}
+
 include!(concat!(env!("OUT_DIR"), "/version.rs"));
 
 const ATTR_ERR_MSG: &str = "Expected a valid semantic version requirement string as \
@@ -27,5 +33,21 @@ pub fn mysqlclient_version(attr: TokenStream, item: TokenStream) -> TokenStream 
         }
     } else {
         panic!(ATTR_ERR_MSG);
+    }
+}
+
+#[proc_macro_attribute]
+pub fn mysqlclient_mysql(_: TokenStream, item: TokenStream) -> TokenStream {
+    match VENDOR {
+        Vendor::MySQL => item,
+        _ => TokenStream::new(),
+    }
+}
+
+#[proc_macro_attribute]
+pub fn mysqlclient_mariadb(_: TokenStream, item: TokenStream) -> TokenStream {
+    match VENDOR {
+        Vendor::MariaDB => item,
+        _ => TokenStream::new(),
     }
 }

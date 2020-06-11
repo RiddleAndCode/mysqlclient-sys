@@ -36,12 +36,25 @@ fn main() {
         binding_helpers::bindings_builder(vec!["/usr/include/mysql".to_string()], true);
     builder = builder.parse_callbacks(Box::new(version_callback.clone()));
     builder.generate().unwrap();
-    let version = version_callback.version().unwrap();
+
+    let version_str = version_callback.version().unwrap();
+    let version_parts: Vec<&str> = version_str.split("-").collect();
+    let version = version_parts[0];
+    let vendor = match version_parts.get(1) {
+        Some(_) => "Vendor::MariaDB",
+        None => "Vendor::MySQL",
+    };
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     fs::write(
         out_path.join("version.rs"),
-        format!("const VERSION: &str = \"{}\";", version),
+        format!(
+            r#"
+            const VERSION: &str = "{}";
+            const VENDOR: Vendor = {};
+        "#,
+            version, vendor
+        ),
     )
     .unwrap();
 }
