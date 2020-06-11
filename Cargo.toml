@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "binding-helpers",
     "mysqlclient-bindings",
     "mysqlclient-macros",
     "mysqlclient-sys",
