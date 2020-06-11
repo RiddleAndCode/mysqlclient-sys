@@ -43,6 +43,10 @@ pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
             println!("cargo:rustc-link-lib=static=mysqlclient");
         } else {
             println!("cargo:rustc-link-lib=mysqlclient");
+
+            // TODO do this dynamically if necessary
+            println!("cargo:rustc-link-lib=ssl");
+            println!("cargo:rustc-link-lib=crypto");
         }
     }
 
