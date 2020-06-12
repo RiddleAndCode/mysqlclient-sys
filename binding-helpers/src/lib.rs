@@ -8,6 +8,17 @@ use std::path::PathBuf;
 use std::process::Command;
 
 pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
+    let libname = env::var("MYSQLCLIENT_LIB_NAME").unwrap_or_else(|_| {
+        #[cfg(target_env = "msvc")]
+        {
+            "mysql".to_string()
+        }
+        #[cfg(not(target_env = "msvc"))]
+        {
+            "mysqlclient".to_string()
+        }
+    });
+
     let (link_paths, include_paths, needs_link) =
     // try environment variables
     if let (Ok(link_paths), Ok(include_paths)) = (
@@ -16,10 +27,10 @@ pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
     ) {
         (vec![link_paths], vec![include_paths], should_link)
     // try pkg-config
-    } else if let Ok((link_paths, include_paths)) = try_pkg_config(should_link) {
+    } else if let Ok((link_paths, include_paths)) = try_pkg_config(&libname, should_link) {
         (link_paths, include_paths, false)
     // try vcpkg
-    } else if let Ok((link_paths, include_paths)) = try_vcpkg(should_link) {
+    } else if let Ok((link_paths, include_paths)) = try_vcpkg(&libname, should_link) {
         (link_paths, include_paths, false)
     // try mysql_config
     } else if let (Some(link_paths), Some(include_paths)) = (
@@ -38,11 +49,11 @@ pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
             println!("cargo:rustc-link-search=native={}", path);
         }
         if cfg!(all(windows, target_env = "gnu")) {
-            println!("cargo:rustc-link-lib=dylib=mysql");
+            println!("cargo:rustc-link-lib=dylib={}", libname);
         } else if cfg!(all(windows, target_env = "msvc")) {
-            println!("cargo:rustc-link-lib=static=mysqlclient");
+            println!("cargo:rustc-link-lib=static={}", libname);
         } else {
-            println!("cargo:rustc-link-lib=mysqlclient");
+            println!("cargo:rustc-link-lib={}", libname);
         }
     }
 
@@ -109,23 +120,26 @@ fn path_strs(paths: Vec<PathBuf>) -> Vec<String> {
         .collect()
 }
 
-fn try_pkg_config(should_link: bool) -> Result<(Vec<String>, Vec<String>), pkg_config::Error> {
+fn try_pkg_config(
+    libname: &str,
+    should_link: bool,
+) -> Result<(Vec<String>, Vec<String>), pkg_config::Error> {
     pkg_config::Config::new()
         .print_system_cflags(should_link)
         .print_system_libs(should_link)
-        .probe("mysqlclient")
+        .probe(libname)
         .map(|lib| (path_strs(lib.link_paths), path_strs(lib.include_paths)))
 }
 
 #[cfg(target_env = "msvc")]
-fn try_vcpkg(should_link: bool) -> Result<(Vec<String>, Vec<String>), vcpkg::Error> {
+fn try_vcpkg(libname: &str, should_link: bool) -> Result<(Vec<String>, Vec<String>), vcpkg::Error> {
     vcpkg::Config::new()
         .emit_includes(should_link)
-        .find_package("libmysql")
+        .find_package(&format!("lib{}", libname))
         .map(|lib| (path_strs(lib.link_paths), path_strs(lib.include_paths)))
 }
 
 #[cfg(not(target_env = "msvc"))]
-fn try_vcpkg(_: bool) -> Result<(Vec<String>, Vec<String>), ()> {
+fn try_vcpkg(_: &str, _: bool) -> Result<(Vec<String>, Vec<String>), ()> {
     Err(())
 }
