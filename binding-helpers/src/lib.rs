@@ -43,10 +43,17 @@ pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
             println!("cargo:rustc-link-lib=static=mysqlclient");
         } else {
             println!("cargo:rustc-link-lib=mysqlclient");
+        }
+    }
 
-            // TODO do this dynamically if necessary
-            println!("cargo:rustc-link-lib=ssl");
-            println!("cargo:rustc-link-lib=crypto");
+    if should_link {
+        if let Ok(extra_libs) = env::var("MYSQLCLIENT_EXTRA_LIBS") {
+            for lib in extra_libs.split_whitespace() {
+                if lib.is_empty() {
+                    continue;
+                }
+                println!("cargo:rustc-link-lib={}", lib);
+            }
         }
     }
 
