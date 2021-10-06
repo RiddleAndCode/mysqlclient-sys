@@ -4,7 +4,7 @@ extern crate pkg_config;
 extern crate vcpkg;
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
@@ -21,10 +21,7 @@ pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
 
     let (link_paths, include_paths, needs_link) =
     // try environment variables
-    if let (Ok(link_paths), Ok(include_paths)) = (
-        env::var("MYSQLCLIENT_LIB_DIR"),
-        env::var("MYSQLCLIENT_INCLUDE_DIR"),
-    ) {
+    if let Some((link_paths, include_paths)) = try_env_variables() {
         (vec![link_paths], vec![include_paths], should_link)
     // try pkg-config
     } else if let Ok((link_paths, include_paths)) = try_pkg_config(&libname, should_link) {
@@ -53,18 +50,26 @@ pub fn probe_libs(should_link: bool) -> (Vec<String>, Vec<String>) {
         } else if cfg!(all(windows, target_env = "msvc")) {
             println!("cargo:rustc-link-lib=static={}", libname);
         } else {
-            println!("cargo:rustc-link-lib={}", libname);
+            println!(
+                "cargo:rustc-link-lib={}={}",
+                determine_mode(&link_paths, &libname),
+                libname
+            );
         }
     }
 
     if should_link {
-        if let Ok(extra_libs) = env::var("MYSQLCLIENT_EXTRA_LIBS") {
-            for lib in extra_libs.split_whitespace() {
-                if lib.is_empty() {
-                    continue;
-                }
-                println!("cargo:rustc-link-lib={}", lib);
+        let extra_libs =
+            env::var("MYSQLCLIENT_EXTRA_LIBS").unwrap_or_else(|_| "ssl crypto".to_string());
+        for lib in extra_libs.trim().split_whitespace() {
+            if lib.is_empty() {
+                continue;
             }
+            println!(
+                "cargo:rustc-link-lib={}={}",
+                determine_mode(&link_paths, lib),
+                lib,
+            );
         }
     }
 
@@ -102,6 +107,29 @@ pub fn bindings_builder(include_paths: Vec<String>, emit: bool) -> bindgen::Buil
     builder
 }
 
+fn try_env_variables() -> Option<(String, String)> {
+    match (
+        env::var("MYSQLCLIENT_LIB_DIR"),
+        env::var("MYSQLCLIENT_INCLUDE_DIR"),
+    ) {
+        (Ok(lib_dir), Ok(include_dir)) => Some((lib_dir, include_dir)),
+        (lib_dir, include_dir) => {
+            let base_dir = if let Ok(base_dir) = env::var("MYSQLCLIENT_DIR") {
+                PathBuf::from(base_dir)
+            } else {
+                return None;
+            };
+            let lib_dir = lib_dir
+                .ok()
+                .or_else(|| base_dir.join("lib").into_os_string().into_string().ok())?;
+            let include_dir = include_dir
+                .ok()
+                .or_else(|| base_dir.join("include").into_os_string().into_string().ok())?;
+            Some((lib_dir, include_dir))
+        }
+    }
+}
+
 fn mysql_config_variable(var_name: &str) -> Option<String> {
     Command::new("mysql_config")
         .arg(format!("--variable={}", var_name))
@@ -129,6 +157,23 @@ fn try_pkg_config(
         .print_system_libs(should_link)
         .probe(libname)
         .map(|lib| (path_strs(lib.link_paths), path_strs(lib.include_paths)))
+}
+
+fn determine_mode(libdirs: &[String], lib: &str) -> &'static str {
+    // First see if a mode was explicitly requested
+    let kind = env::var("MYSQLCLIENT_STATIC");
+    match kind.as_ref().map(|s| s.as_str()) {
+        Ok("0") => return "dylib",
+        Ok(_) => return "static",
+        _ => {}
+    }
+
+    for dir in libdirs {
+        if Path::new(dir).join(format!("lib{}.a", lib)).exists() {
+            return "static";
+        }
+    }
+    "dylib"
 }
 
 #[cfg(target_env = "msvc")]
