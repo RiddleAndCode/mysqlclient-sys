@@ -11,4 +11,3 @@ links = "mysqlclient"
 
 [build-dependencies]
 binding-helpers = { path = "../binding-helpers" }
-bindgen = "0.54.0"
